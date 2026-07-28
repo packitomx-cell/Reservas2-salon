@@ -36,7 +36,7 @@ function addDays(d, n) { const nd = new Date(d); nd.setDate(nd.getDate() + n); r
 function isToday(d) { const t = new Date(); return dateKey(d) === dateKey(t); }
 function genId(prefix) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`; }
 
-const emptyForm = { id: null, roomId: "", date: "", startTime: "09:00", endTime: "10:00", title: "", person: "", notes: "" };
+const emptyForm = { id: null, roomId: "", date: "", startTime: "09:00", endTime: "10:00", title: "", person: "", notes: "", pin: "" };
 
 const DATA_DOC = doc(db, "appData", "main");
 
@@ -53,6 +53,7 @@ export default function App() {
 
   const [modal, setModal] = useState(null);
   const [formError, setFormError] = useState("");
+  const [pinPrompt, setPinPrompt] = useState(null);
 
   useEffect(() => {
     const unsub = onSnapshot(
@@ -112,6 +113,10 @@ export default function App() {
       setFormError("Completa sala, fecha, horario y motivo.");
       return;
     }
+    if (!/^\d{4}$/.test(modal.pin || "")) {
+      setFormError("El PIN debe ser de 4 dígitos numéricos. Lo vas a necesitar para cancelar esta reserva.");
+      return;
+    }
     if (modal.startTime >= modal.endTime) {
       setFormError("La hora de término debe ser posterior a la de inicio.");
       return;
@@ -138,6 +143,21 @@ export default function App() {
     const next = reservations.filter((r) => r.id !== id);
     setReservations(next);
     await persist(rooms, next);
+  }
+
+  function attemptDelete(res) {
+    setPinPrompt({ id: res.id, value: "", error: "" });
+  }
+
+  async function confirmDeleteWithPin() {
+    const res = reservations.find((r) => r.id === pinPrompt.id);
+    if (!res) { setPinPrompt(null); return; }
+    if (pinPrompt.value !== res.pin) {
+      setPinPrompt({ ...pinPrompt, error: "PIN incorrecto. Solo quien creó la reserva puede cancelarla." });
+      return;
+    }
+    await deleteReservation(res.id);
+    setPinPrompt(null);
   }
 
   async function addRoom() {
@@ -280,7 +300,7 @@ export default function App() {
                             </span>
                             <div className="flex gap-1 shrink-0">
                               <button onClick={() => openEditModal(res)} className="text-gray-400 hover:text-gray-700"><Pencil size={12} /></button>
-                              <button onClick={() => deleteReservation(res.id)} className="text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>
+                              <button onClick={() => attemptDelete(res)} className="text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>
                             </div>
                           </div>
                           <p className="font-medium mt-1">{res.title}</p>
@@ -346,6 +366,19 @@ export default function App() {
                 <input value={modal.person} onChange={(e) => setModal({ ...modal, person: e.target.value })} placeholder="Ej. Congregación San Ysidro" className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
               </div>
 
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">PIN de 4 dígitos (lo vas a necesitar para cancelar)</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={modal.pin}
+                  onChange={(e) => setModal({ ...modal, pin: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                  placeholder="Ej. 1234"
+                  className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                />
+              </div>
+
               {formError && (
                 <p className="text-xs text-red-600 flex items-start gap-1">
                   <AlertCircle size={13} className="shrink-0 mt-0.5" /> {formError}
@@ -356,6 +389,34 @@ export default function App() {
                 <button onClick={saveReservation} style={{ backgroundColor: "#1F3350" }} className="flex-1 text-white rounded-lg py-2 text-sm font-medium">Guardar</button>
                 <button onClick={closeModal} className="px-4 rounded-lg border border-gray-300 text-sm">Cancelar</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pinPrompt && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xs p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-medium">Cancelar reserva</h2>
+              <button onClick={() => setPinPrompt(null)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">Ingresa el PIN con el que se creó esta reserva.</p>
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              autoFocus
+              value={pinPrompt.value}
+              onChange={(e) => setPinPrompt({ ...pinPrompt, value: e.target.value.replace(/\D/g, "").slice(0, 4), error: "" })}
+              onKeyDown={(e) => e.key === "Enter" && confirmDeleteWithPin()}
+              placeholder="PIN"
+              className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+            />
+            {pinPrompt.error && <p className="text-xs text-red-600 mt-1">{pinPrompt.error}</p>}
+            <div className="flex gap-2 pt-3">
+              <button onClick={confirmDeleteWithPin} style={{ backgroundColor: "#B91C1C" }} className="flex-1 text-white rounded-lg py-2 text-sm font-medium">Cancelar reserva</button>
+              <button onClick={() => setPinPrompt(null)} className="px-4 rounded-lg border border-gray-300 text-sm">Cerrar</button>
             </div>
           </div>
         </div>
