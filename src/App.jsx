@@ -145,19 +145,28 @@ export default function App() {
     await persist(rooms, next);
   }
 
-  function attemptDelete(res) {
-    setPinPrompt({ id: res.id, value: "", error: "" });
+  function attemptEdit(res) {
+    setPinPrompt({ id: res.id, value: "", error: "", action: "edit" });
   }
 
-  async function confirmDeleteWithPin() {
+  function attemptDelete(res) {
+    setPinPrompt({ id: res.id, value: "", error: "", action: "delete" });
+  }
+
+  async function confirmPin() {
     const res = reservations.find((r) => r.id === pinPrompt.id);
     if (!res) { setPinPrompt(null); return; }
     if (pinPrompt.value !== res.pin) {
-      setPinPrompt({ ...pinPrompt, error: "PIN incorrecto. Solo quien creó la reserva puede cancelarla." });
+      setPinPrompt({ ...pinPrompt, error: "PIN incorrecto. Solo quien creó la reserva puede editarla o cancelarla." });
       return;
     }
-    await deleteReservation(res.id);
-    setPinPrompt(null);
+    if (pinPrompt.action === "edit") {
+      setPinPrompt(null);
+      openEditModal(res);
+    } else {
+      await deleteReservation(res.id);
+      setPinPrompt(null);
+    }
   }
 
   async function addRoom() {
@@ -299,7 +308,7 @@ export default function App() {
                               <Clock size={11} /> {res.startTime}–{res.endTime}
                             </span>
                             <div className="flex gap-1 shrink-0">
-                              <button onClick={() => openEditModal(res)} className="text-gray-400 hover:text-gray-700"><Pencil size={12} /></button>
+                              <button onClick={() => attemptEdit(res)} className="text-gray-400 hover:text-gray-700"><Pencil size={12} /></button>
                               <button onClick={() => attemptDelete(res)} className="text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>
                             </div>
                           </div>
@@ -398,7 +407,7 @@ export default function App() {
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-xs p-5">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-base font-medium">Cancelar reserva</h2>
+              <h2 className="text-base font-medium">{pinPrompt.action === "edit" ? "Editar reserva" : "Cancelar reserva"}</h2>
               <button onClick={() => setPinPrompt(null)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
             </div>
             <p className="text-xs text-gray-500 mb-3">Ingresa el PIN con el que se creó esta reserva.</p>
@@ -409,13 +418,19 @@ export default function App() {
               autoFocus
               value={pinPrompt.value}
               onChange={(e) => setPinPrompt({ ...pinPrompt, value: e.target.value.replace(/\D/g, "").slice(0, 4), error: "" })}
-              onKeyDown={(e) => e.key === "Enter" && confirmDeleteWithPin()}
+              onKeyDown={(e) => e.key === "Enter" && confirmPin()}
               placeholder="PIN"
               className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
             />
             {pinPrompt.error && <p className="text-xs text-red-600 mt-1">{pinPrompt.error}</p>}
             <div className="flex gap-2 pt-3">
-              <button onClick={confirmDeleteWithPin} style={{ backgroundColor: "#B91C1C" }} className="flex-1 text-white rounded-lg py-2 text-sm font-medium">Cancelar reserva</button>
+              <button
+                onClick={confirmPin}
+                style={{ backgroundColor: pinPrompt.action === "edit" ? "#1F3350" : "#B91C1C" }}
+                className="flex-1 text-white rounded-lg py-2 text-sm font-medium"
+              >
+                {pinPrompt.action === "edit" ? "Continuar" : "Cancelar reserva"}
+              </button>
               <button onClick={() => setPinPrompt(null)} className="px-4 rounded-lg border border-gray-300 text-sm">Cerrar</button>
             </div>
           </div>
